@@ -1,14 +1,20 @@
 import asyncio
 
 from bs4 import BeautifulSoup
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, TimeoutError
+from typing import Optional
 
 
-async def check(case_id: str, approved_codes: list) -> bool:
+async def case_id_lookup(case_id: str, approved_codes: list) -> Optional[dict]:
     """
-    Takes a Case ID and a list of codes to search for in candidate.
-    Returns True if they have at least one of the codes.
-    Returns False if they have none of the codes.
+    Takes a Case ID and a list of codes to search for a candidate.
+    
+    Returns a dictionary with:
+    -first_name
+    -last_name
+    -code_check_results
+
+    Will return None if a TimeoutError occurs.
     """
 
     async with async_playwright() as p:
@@ -17,12 +23,18 @@ async def check(case_id: str, approved_codes: list) -> bool:
 
         await page.goto("https://aels.ade.arkansas.gov/AELS/Search.aspx")
 
-        await page.locator("[id=MainContent_SearchCaseId]").fill(case_id)
-        await page.locator("[id=MainContent_SearchButton]").click()
-        await page.get_by_text("Select").last.click()
-        content = await page.locator(
-            "[id=ctl00_MainContent_grdPublicLicenseAreas_ctl00]"
-        ).inner_html()
+        try:
+            await page.locator("[id=MainContent_SearchCaseId]").fill(case_id)
+            await page.locator("[id=MainContent_SearchButton]").click()
+            await page.get_by_text("Select").last.click()
+            first_name = await page.locator("[id=ctl00_MainContent_txtFirstName]").input_value()
+            last_name = await page.locator("[id=ctl00_MainContent_txtLastName]").input_value()
+            content = await page.locator(
+                "[id=ctl00_MainContent_grdPublicLicenseAreas_ctl00]"
+            ).inner_html()
+        except TimeoutError:
+            return None
+
 
     soup = BeautifulSoup(content, "html.parser")
     table_content = soup.find_all("tr")
@@ -34,13 +46,22 @@ async def check(case_id: str, approved_codes: list) -> bool:
     ]
 
     # Check to see if they have the code.
-    for code in possible_codes:
-        if code in approved_codes:
-            return True
-    return False
+    code_checks = {}
+
+    for code in approved_codes:
+        if code in possible_codes:
+            code_checks[code] = True
+        else:
+            code_checks[code] = False
+    
+    return {
+        "first_name": first_name,
+        "last_name": last_name,
+        "code_checks": code_checks
+    }
 
 
 if __name__ == "__main__":
     # Zack Check: 528 and 317
-    print(asyncio.run(check("8397011", ["528"])))
-    print(asyncio.run(check("8397011", ["317"])))
+    print(asyncio.run(case_id_lookup("8397011", ["528"])))
+    print(asyncio.run(case_id_lookup("8397011", ["317"])))
