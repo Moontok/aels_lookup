@@ -5,14 +5,18 @@ from playwright.async_api import async_playwright, TimeoutError
 from typing import Optional
 
 
-async def case_id_lookup(case_id: str, approved_codes: list) -> Optional[dict]:
+async def case_id_lookup(
+    case_id: str,
+    approved_codes: list,
+    timeout=30000
+) -> Optional[dict]:
     """
     Takes a Case ID and a list of codes to search for a candidate.
     
     Returns a dictionary with:
     -first_name
     -last_name
-    -code_check_results
+    -code_checks
 
     Will return None if a TimeoutError occurs.
     """
@@ -20,6 +24,7 @@ async def case_id_lookup(case_id: str, approved_codes: list) -> Optional[dict]:
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
+        page.set_default_timeout(timeout)
 
         await page.goto("https://aels.ade.arkansas.gov/AELS/Search.aspx")
 
